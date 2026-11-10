@@ -27,6 +27,7 @@ from app.utils.cache import acquire_generation_lock, release_generation_lock
 from app.utils.errors import AppError
 from app.utils.logger import log_event
 from app.services.recipe_service import can_write, get_recipe, require_write
+from app.texture.normal_map import GENERATION_ALGO_VERSION
 
 
 def list_variants(db: Session, recipe_id: int) -> list[TextureVariant]:
@@ -57,6 +58,7 @@ def serialize_variant(variant: TextureVariant) -> dict:
         "seam_score": variant.seam_score,
         "status": variant.status,
         "checksum": variant.checksum,
+        "algo_version": int(variant.algo_version or 1),
         "is_current": variant.is_current,
         "created_at": variant.created_at,
     }
@@ -103,6 +105,7 @@ def request_generation(db: Session, user: dict, recipe_id: int, payload) -> Text
             seed_used=recipe.seed,
             status="generating",
             file_paths_json={},
+            algo_version=GENERATION_ALGO_VERSION,
         )
         recipe.status = RecipeStatus.GENERATING.value
         user_row.quota_used_count += 1
@@ -166,6 +169,8 @@ def perform_generation(db: Session, variant_id: int) -> TextureVariant:
         variant.generation_ms = int(result["generation_ms"])
         variant.seam_score = int(result["seam_score"])
         variant.checksum = digest.hexdigest()
+        # 记录本次渲染使用的算法版本；同版本下同配方同 seed 同分辨率 checksum 才可复现对比。
+        variant.algo_version = GENERATION_ALGO_VERSION
         variant.status = "ready"
         recipe.status = RecipeStatus.READY.value
         recipe.thumbnail_path = preview_rel
@@ -179,7 +184,8 @@ def perform_generation(db: Session, variant_id: int) -> TextureVariant:
         db.commit()
         db.refresh(variant)
         log_event("GENERATION_DONE", recipe_id=recipe.id, variant_id=variant.id,
-                  duration_ms=variant.generation_ms, seam_score=variant.seam_score)
+                  duration_ms=variant.generation_ms, seam_score=variant.seam_score,
+                  algo_version=GENERATION_ALGO_VERSION)
         return variant
     except AppError:
         raise

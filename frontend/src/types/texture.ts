@@ -11,6 +11,7 @@ export interface TextureVariant {
   seam_score: number
   status: 'generating' | 'ready' | 'failed'
   checksum: string | null
+  algo_version: number
   is_current: number
   created_at?: string
 }

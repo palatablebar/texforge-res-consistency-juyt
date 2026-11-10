@@ -161,20 +161,22 @@ def render_recipe(nodes, resolution: int, seed: int) -> dict:
     ao_params = _graph_params(active, NODE_TYPE_AO, {"radius": 6, "strength": 0.75})
 
     normal_rgb = normal_map.height_to_normal(
-        height, float(normal_params.get("normal_scale", 1.0)), bool(normal_params.get("flip_y", False))
+        height, float(normal_params.get("normal_scale", 1.0)),
+        bool(normal_params.get("flip_y", False)), resolution=resolution
     )
 
     fine = value_noise(resolution, 18.0, (seed + 29) & 0x7FFFFFFF)
     mid = perlin_noise(resolution, 7.0, (seed + 61) & 0x7FFFFFFF)
     roughness = derive.derive_roughness(height, fine, base=float(palette["roughness"]))
     metallic = derive.derive_metallic(height, mid, base=float(palette["metallic"]))
-    ao = derive.derive_ao(height, int(ao_params.get("radius", 6)), float(ao_params.get("strength", 0.75)))
+    ao = derive.derive_ao(height, int(ao_params.get("radius", 6)),
+                          float(ao_params.get("strength", 0.75)), resolution=resolution)
 
     tint = np.clip(mid * 0.55 + fine * 0.45, 0.0, 1.0)
     base_color = gradient.colorize(height, palette["from"], palette["to"], tint=tint)
 
     color_gray = base_color.astype(np.float32).mean(axis=2) / 255.0
-    score = seam.seam_score(height, color_gray)
+    score = seam.seam_score(height, color_gray, resolution=resolution)
 
     generation_ms = int(round((time.perf_counter() - started) * 1000))
     return {

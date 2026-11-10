@@ -70,6 +70,7 @@ async function load() {
     seam_score: variant.seam_score,
     status: variant.status as TextureVariant['status'],
     checksum: null,
+    algo_version: variant.algo_version || 1,
     is_current: variant.is_current,
   })) as TextureVariant[]
   try {

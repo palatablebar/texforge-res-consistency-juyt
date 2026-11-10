@@ -135,6 +135,7 @@ def serialize_recipe_detail(db: Session, recipe: MaterialRecipe) -> dict:
             "generation_ms": v.generation_ms,
             "status": v.status,
             "preview_path": v.preview_path,
+            "algo_version": int(v.algo_version or 1),
             "is_current": v.is_current,
         }
         for v in variants[:6]

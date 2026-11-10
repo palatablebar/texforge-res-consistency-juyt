@@ -24,6 +24,7 @@ from app.models.texture_variant import TextureVariant
 from app.models.user import User
 from app.services.pack_service import pack_filename, perform_pack
 from app.services.variant_service import perform_generation
+from app.texture.normal_map import GENERATION_ALGO_VERSION
 from app.utils.logger import log_event
 from app.utils.password import hash_password
 
@@ -212,6 +213,7 @@ def seed_recipe(db, spec: dict, owner: User) -> tuple[MaterialRecipe, int]:
                 seed_used=(spec["seed"] + index * 137) % 2147483647,
                 status="generating",
                 file_paths_json={},
+                algo_version=GENERATION_ALGO_VERSION,
             )
             db.add(variant)
             db.commit()

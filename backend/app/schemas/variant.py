@@ -15,6 +15,7 @@ class VariantOut(ORMModel):
     seam_score: int = 0
     status: str = "generating"
     checksum: Optional[str] = None
+    algo_version: int = 1
     is_current: int = 0
     created_at: Optional[datetime] = None
 

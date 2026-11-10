@@ -31,6 +31,7 @@ export interface RecipeDetail extends Recipe {
     generation_ms: number
     status: string
     preview_path: string | null
+    algo_version: number
     is_current: number
   }>
 }

@@ -1,6 +1,8 @@
 # TexForge · 过程式材质纹理生成与通道打包工坊
 
-> 把节点式配方变成可复现的 PBR 贴图与通道包：同一 `resolution + seed + 节点图` 逐像素一致，每次生成留一条 `TextureVariant` 供对比、回滚与打包。
+> 把节点式配方变成可复现的 PBR 贴图与通道包：同一 `algo_version + resolution + seed + 节点图` 逐像素一致，每次生成留一条带算法版本号的 `TextureVariant` 供对比、回滚与打包。
+>
+> **跨分辨率一致性（v2 起）**：法线梯度、AO 半径、seam 梯度全部按 UV 空间解释并以 512 为参考分辨率归一化——同一配方同一 seed 出的 2048 缩小到 512 后与直接出的 512 视觉一致；512 下 v2 与 v1 逐像素相同，历史 `normal_scale` / AO `radius` 参数无需调整。
 
 模拟客户：**栖刻视觉**（35 人建筑可视化 / 产品广告公司，材质组 6 人 = 2 TA + 4 材质美术，每月并行 10+ 项目）。
 本系统替换「Substance Designer 手工模板 + 网盘 + 命名规范文档」这一段：上游是客户材质 brief，下游是 UE / Unity 材质实例与外包团队，中间产出的是**可复现的配方、可对比的变体、命名与通道映射都合规的打包 PNG**。
@@ -49,7 +51,7 @@ seed **幂等**：按 `email` / `slug` 自然键 upsert，重复执行不会产�
 4. 在 `/variants` 左右对比：每版 `generation_ms` 与 `seam_score` 都来自后端真实计算；把接缝最好的一版设为当前版本，反例版本留档不删。
 5. 在 `/packs` 选 ORM 预设（`r=roughness, g=metallic, b=ao, a=height`），预检通过后打包，下载 `terracotta_wall_orm_1024.png`；再把映射另存为项目预设。
 6. 外包 PM 用只读账号进 `/variants` 与 `/packs` 核对「分辨率、接缝、seed 与配方记录一致」后下载。
-7. 第二天改色：只动 base_color 相关节点、seed 不变，重新生成的 checksum 与前一天同 seed 结果一致，用来证明「只改了颜色，没顺手改别的」。
+7. 第二天改色：只动 base_color 相关节点、seed 不变，重新生成的 checksum 与前一天同 seed 结果一致（前提是 `algo_version` 相同），用来证明「只改了颜色，没顺手改别的」。
 
 > 剧本里的 92 / 88 / 71 是接缝评分的示例读数；本仓库所有展示出来的数值都是后端 `texture/seam.py` 实际算出的整数，README 与页面都读同一份记录，不在前端写死。
 
@@ -226,6 +228,10 @@ celery -A app.config.celery_app worker -l info
 
 ## 同 seed 复现的验证方法
 
+> checksum 复现的前提是**同一 `algo_version`**。历史 v1 变体不重算、不覆盖；
+> v1（按像素的梯度/AO 半径）与 v2（UV 空间补偿）之间只做视觉对比，`/variants`
+> 页面在跨版本对比时会显示警告，不把两边 checksum 当同一基准。
+
 ```bash
 # 1) 对同一配方连续两次生成（seed 与 resolution 不变）
 docker compose exec backend python - <<'PY'
@@ -239,23 +245,39 @@ for _ in range(2):
     v = TextureVariant(recipe_id=r.id, revision=999, seed_used=r.seed, status='generating', file_paths_json={})
     db.add(v); db.commit(); db.refresh(v)
     perform_generation(db, v.id)
-    print(v.id, v.checksum)
+    print(v.id, v.algo_version, v.checksum)
 PY
 
 # 2) 比对两次 sha256：应完全一致
 docker compose exec backend python -c "from app.config.database import SessionLocal; from app.models.texture_variant import TextureVariant; db=SessionLocal(); rows=[v.checksum for v in db.query(TextureVariant).filter(TextureVariant.revision==999).all()]; print(rows); assert len(set(rows))==1, 'checksum mismatch'; print('reproducible OK')"
 ```
 
-也可以直接看 `GET /api/variants/{id}` 响应里的 `checksum` 字段。
+也可以直接看 `GET /api/variants/{id}` 响应里的 `checksum` 与 `algo_version` 字段。
+
+### 跨分辨率一致性验证（给外包看的数字）
+
+对 seed 里的三个 PRJ-2611 配方分别生成 512 与 2048，把 2048 按平铺感知的
+区域均值缩到 512，逐通道打印 MAE / RMSE / 最大误差（0~255 色阶），并输出
+2x2 平铺边界的断层量；`--compare` 同时跑修复前 v1 与修复后 v2，自动验收：
+
+```bash
+docker compose exec backend python scripts/verify_resolution_consistency.py --compare
+# 或本机（需 numpy / Pillow）：
+python3 scripts/verify_resolution_consistency.py --compare --json report.json
+```
+
+验收门槛：512 下 v1/v2 六通道逐像素一致；法线/AO 跨分辨率 MAE < 4 色阶，
+其余通道不劣于 v1；`seam_score` 不变差；2048 耗时 v2/v1 < 2x；同参同 seed
+逐像素一致。历史 v1 基线可用 `--legacy` 单独复现。
 
 ---
 
 ## 必须真实实现的计算
 
 - `texture/noise.py`：value / perlin / worley（F1 距离）三种向量化噪声，fbm 5 个 octave 叠加；`texture/warp.py` 两层噪声偏移采样坐标做 domain warp
-- `texture/normal_map.py`：高度图经 Sobel 求梯度生成切线空间法线，`normal_scale` 参与强度
-- `texture/derive.py`：由高度与噪声派生 roughness / metallic / ao（AO 用局部均值遮蔽近似）
-- `texture/seam.py`：比对左右边缘列与上下边缘行的像素差与梯度差，归一化成 0~100 的 `seam_score` 写入 `TextureVariant`
+- `texture/normal_map.py`：高度图经 Sobel 求梯度生成切线空间法线，`normal_scale` 参与强度；v2 起梯度按 UV 空间换算并以 512 为参考分辨率归一化（res=512 与 v1 逐位一致）
+- `texture/derive.py`：由高度与噪声派生 roughness / metallic / ao（AO 用局部均值遮蔽近似）；v2 起 AO `radius` 解释为参考分辨率下的像素半径，按 `res/512` 换算实际盒半径
+- `texture/seam.py`：比对左右边缘列与上下边缘行的像素差与梯度差，归一化成 0~100 的 `seam_score` 写入 `TextureVariant`；v2 起梯度项按参考分辨率归一化，避免高分辨率分数虚高
 - `texture/packer.py`：按 `channel_mapping_json` 合成 RGBA 四通道并输出 8bit PNG，字节数写 `byte_size`
 - `texture/renderer.py`：解析 `RecipeNode` DAG、逐节点求值、组装六通道、numpy 球体着色生成预览
 

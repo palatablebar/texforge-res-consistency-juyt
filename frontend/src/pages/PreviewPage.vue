@@ -153,6 +153,7 @@ function updateSetting(key: keyof typeof preview.settings, value: number) {
           <div><span class="mono-label">generation_ms</span> {{ formatMs(selectedVariant?.generation_ms) }}</div>
           <div><span class="mono-label">seam_score</span> {{ formatSeam(selectedVariant?.seam_score) }}</div>
           <div><span class="mono-label">checksum</span> {{ selectedVariant?.checksum?.slice(0, 16) || '—' }}</div>
+          <div><span class="mono-label">算法版本</span> v{{ selectedVariant?.algo_version || 1 }}</div>
           <div><span class="mono-label">预览图</span> 后端 numpy 球体着色</div>
         </div>
 

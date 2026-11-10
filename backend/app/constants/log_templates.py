@@ -14,7 +14,7 @@ LOG_TEMPLATES = {
     "NODE_PARAM_PATCH": "节点参数修改 recipe_id={recipe_id} node_id={node_id} changed={changed}",
     "GENERATION_ENQUEUED": "生成入队 recipe_id={recipe_id} variant_id={variant_id} resolution={resolution} seed={seed}",
     "GENERATION_START": "生成开始 recipe_id={recipe_id} variant_id={variant_id} revision={revision}",
-    "GENERATION_DONE": "生成完成 recipe_id={recipe_id} variant_id={variant_id} duration_ms={duration_ms} seam_score={seam_score}",
+    "GENERATION_DONE": "生成完成 recipe_id={recipe_id} variant_id={variant_id} duration_ms={duration_ms} seam_score={seam_score} algo_version={algo_version}",
     "GENERATION_FAILED": "生成失败 recipe_id={recipe_id} variant_id={variant_id} error={error}",
     "QUOTA_REJECTED": "配额拒绝 user_id={user_id} route={route} used={used} quota={quota}",
     "RATE_LIMIT_HIT": "限流命中 user_id={user_id} route={route} retry_after={retry_after}",

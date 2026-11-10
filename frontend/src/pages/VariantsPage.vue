@@ -34,6 +34,15 @@ const busy = ref(false)
 const selectedRecipe = computed(() => recipes.value.find((recipe) => recipe.id === selectedRecipeId.value) || null)
 const leftVariant = computed(() => variants.value.find((variant) => variant.id === leftId.value) || null)
 const rightVariant = computed(() => variants.value.find((variant) => variant.id === rightId.value) || null)
+// 跨算法版本（v1 按像素 / v2 UV 空间补偿）的变体 checksum 不是同一基准，只可做视觉对比。
+const algoMismatch = computed(() =>
+  Boolean(leftVariant.value && rightVariant.value
+    && (leftVariant.value.algo_version || 1) !== (rightVariant.value.algo_version || 1)),
+)
+
+function algoLabel(variant: TextureVariant | null) {
+  return `v${variant?.algo_version || 1}`
+}
 
 function imageFor(variant: TextureVariant | null) {
   const path = variant?.file_paths_json?.[channel.value]
@@ -116,7 +125,7 @@ function swap() {
           <label class="field-label">左版</label>
           <select v-model="leftId" class="field">
             <option v-for="variant in variants" :key="variant.id" :value="variant.id">
-              rev {{ variant.revision }} · seam {{ variant.seam_score }}
+              rev {{ variant.revision }} · {{ algoLabel(variant) }} · seam {{ variant.seam_score }}
             </option>
           </select>
         </div>
@@ -124,7 +133,7 @@ function swap() {
           <label class="field-label">右版</label>
           <select v-model="rightId" class="field">
             <option v-for="variant in variants" :key="variant.id" :value="variant.id">
-              rev {{ variant.revision }} · seam {{ variant.seam_score }}
+              rev {{ variant.revision }} · {{ algoLabel(variant) }} · seam {{ variant.seam_score }}
             </option>
           </select>
         </div>
@@ -139,11 +148,18 @@ function swap() {
 
       <p v-if="message" class="inline-message">{{ message }}</p>
 
+      <p v-if="algoMismatch" class="algo-warning">
+        ⚠ 左右两版生成算法不同（{{ algoLabel(leftVariant) }} vs {{ algoLabel(rightVariant) }}）：
+        v1 按像素求梯度/AO 半径，v2 按 UV 空间补偿，两版 checksum 不是同一基准，
+        本页仅用于视觉对比；同算法版本、同 resolution + seed + 节点图的 checksum 才可直接比对。
+      </p>
+
       <div class="compare-grid">
         <section class="compare-panel">
           <header class="compare-head">
             <h3 class="compare-title">
               rev {{ leftVariant?.revision ?? '—' }}
+              <span class="algo-tag">算法 {{ algoLabel(leftVariant) }}</span>
               <StatusBadge v-if="leftVariant" :status="leftVariant.status" />
             </h3>
             <span class="mono-label num">seed {{ leftVariant?.seed_used ?? '—' }}</span>
@@ -158,6 +174,7 @@ function swap() {
           <div class="variant-detail num">
             <span>generation_ms {{ formatMs(leftVariant?.generation_ms) }}</span>
             <span>checksum {{ leftVariant?.checksum?.slice(0, 12) || '—' }}</span>
+            <span>算法版本 {{ algoLabel(leftVariant) }}</span>
             <span>当前版本 {{ leftVariant?.is_current ? '是' : '否' }}</span>
           </div>
           <div class="compare-actions">
@@ -188,6 +205,7 @@ function swap() {
           <header class="compare-head">
             <h3 class="compare-title">
               rev {{ rightVariant?.revision ?? '—' }}
+              <span class="algo-tag">算法 {{ algoLabel(rightVariant) }}</span>
               <StatusBadge v-if="rightVariant" :status="rightVariant.status" />
             </h3>
             <span class="mono-label num">seed {{ rightVariant?.seed_used ?? '—' }}</span>
@@ -202,6 +220,7 @@ function swap() {
           <div class="variant-detail num">
             <span>generation_ms {{ formatMs(rightVariant?.generation_ms) }}</span>
             <span>checksum {{ rightVariant?.checksum?.slice(0, 12) || '—' }}</span>
+            <span>算法版本 {{ algoLabel(rightVariant) }}</span>
             <span>当前版本 {{ rightVariant?.is_current ? '是' : '否' }}</span>
           </div>
           <div class="compare-actions">
@@ -215,7 +234,8 @@ function swap() {
 
       <p class="hint">
         不同 revision 的 seed 与配方记录都能在 <code>/api/variants/{id}</code> 的 checksum 中复现；
-        同一 resolution + seed + 节点图两次生成的校验和一致。
+        仅在<strong>同一 algo_version</strong>、同一 resolution + seed + 节点图下，两次生成的校验和才一致。
+        历史 v1 变体不重算不覆盖，与 v2 变体之间只做视觉对比。
       </p>
     </div>
 
@@ -254,6 +274,22 @@ function swap() {
   font-size: 12px;
   color: var(--moss);
   margin: 10px 0 0;
+}
+.algo-warning {
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  border: 1px solid var(--vermilion);
+  background: color-mix(in srgb, var(--vermilion) 8%, transparent);
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.algo-tag {
+  font-size: 11px;
+  font-weight: 400;
+  padding: 2px 8px;
+  border: 1px solid var(--paper-edge);
+  color: var(--ink-soft);
 }
 .compare-grid {
   display: grid;
