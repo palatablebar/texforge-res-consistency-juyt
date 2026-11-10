@@ -1,0 +1,15 @@
+/* TexForge 设计 token：全部 oklch，组件与 Tailwind 只引用变量 */
+:root {
+  --paper: oklch(96.5% 0.014 88);
+  --paper-2: oklch(93.5% 0.02 86);
+  --paper-edge: oklch(85% 0.025 84);
+  --ink: oklch(24% 0.02 62);
+  --ink-soft: oklch(46% 0.015 62);
+  --vermilion: oklch(58% 0.19 32);
+  --indigo: oklch(48% 0.09 248);
+  --gamboge: oklch(78% 0.14 88);
+  --moss: oklch(52% 0.09 148);
+  --paper-grid: oklch(85% 0.025 84 / 0.45);
+  --paper-wash: oklch(93.5% 0.02 86 / 0.65);
+  --ink-faint: oklch(24% 0.02 62 / 0.12);
+}

@@ -1,0 +1,121 @@
+name: texforge
+
+services:
+  db:
+    image: mysql:8.0
+    container_name: ${COMPOSE_PROJECT_NAME:-texforge}-db
+    command: --default-authentication-plugin=mysql_native_password --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      DB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+    ports:
+      - "${DB_PORT:-17611}:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$DB_ROOT_PASSWORD --silent"]
+      interval: 8s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+
+  redis:
+    image: redis:7-alpine
+    container_name: ${COMPOSE_PROJECT_NAME:-texforge}-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 8s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  backend:
+    build:
+      context: ./backend
+    container_name: ${COMPOSE_PROJECT_NAME:-texforge}-backend
+    environment:
+      DATABASE_URL: mysql+pymysql://${DB_USER}:${DB_PASSWORD}@db:3306/${DB_NAME}?charset=utf8mb4
+      REDIS_URL: ${REDIS_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRE_HOURS: "8"
+      ARTIFACT_DIR: ${ARTIFACT_DIR}
+      PREVIEW_DIR: ${PREVIEW_DIR}
+      SEED_DEMO: ${SEED_DEMO}
+      GENERATION_DAILY_QUOTA: ${GENERATION_DAILY_QUOTA}
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB}
+      PYTHONUNBUFFERED: "1"
+    ports:
+      - "${BACKEND_PORT:-19111}:8000"
+    volumes:
+      - artifact_data:/data/artifacts
+      - preview_data:/data/previews
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8000/health || exit 1"]
+      interval: 10s
+      timeout: 8s
+      retries: 30
+      start_period: 45s
+
+  worker:
+    build:
+      context: .
+      dockerfile: worker/Dockerfile
+    container_name: ${COMPOSE_PROJECT_NAME:-texforge}-worker
+    environment:
+      DATABASE_URL: mysql+pymysql://${DB_USER}:${DB_PASSWORD}@db:3306/${DB_NAME}?charset=utf8mb4
+      REDIS_URL: ${REDIS_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      ARTIFACT_DIR: ${ARTIFACT_DIR}
+      PREVIEW_DIR: ${PREVIEW_DIR}
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - artifact_data:/data/artifacts
+      - preview_data:/data/previews
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "/app/worker/healthcheck.py"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 25s
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: ${COMPOSE_PROJECT_NAME:-texforge}-frontend
+    ports:
+      - "${FRONTEND_PORT:-18111}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+volumes:
+  mysql_data:
+    name: ${COMPOSE_PROJECT_NAME:-texforge}_mysql_data
+  redis_data:
+    name: ${COMPOSE_PROJECT_NAME:-texforge}_redis_data
+  artifact_data:
+    name: ${COMPOSE_PROJECT_NAME:-texforge}_artifact_data
+  preview_data:
+    name: ${COMPOSE_PROJECT_NAME:-texforge}_preview_data
